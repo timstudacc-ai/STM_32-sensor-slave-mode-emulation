@@ -55,7 +55,7 @@ graph TD
     S_MAIN -->|Button EXTI| S_REG
     
     S_REG -->|Seq_Transmit_IT| I2C_BUS
-    I2C_BUS -->|Burst Read (ACK/NACK)| M_DRV
+    I2C_BUS -->|Burst Read ACK/NACK| M_DRV
     M_DRV -->|Data Output| PC[PC Serial Monitor via UART]:::master
 ```
 
