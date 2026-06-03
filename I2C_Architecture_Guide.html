@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>I2C Architecture Guide</title>
+    <style>
+        /* 1. Visual Style & Design Tokens */
+        :root {
+            --slate: #141413;
+            --off-white: #F9F8F6;
+            --white: #ffffff;
+            --clay: #D97757;
+            --olive: #788C5D;
+            --sky: #6A8CAF;
+            --oat: #E3DACC;
+            --gray: #8c8c8c;
+            --code-bg: #1e1e1d;
+        }
+
+        body {
+            background-color: var(--off-white);
+            color: var(--slate);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 15px;
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px 20px;
+        }
+
+        h1, h2, h3 {
+            font-family: Georgia, serif;
+            color: var(--slate);
+            margin-top: 0;
+        }
+
+        h1 { font-size: 32px; border-bottom: 2px solid var(--oat); padding-bottom: 10px; margin-bottom: 30px; }
+        h2 { font-size: 24px; margin-top: 40px; }
+        h3 { font-size: 20px; color: var(--clay); }
+
+        .main-container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: var(--white);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            border: 1px solid var(--oat);
+            padding: 40px;
+            box-sizing: border-box;
+        }
+
+        /* Inline Tokens */
+        .token {
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            font-size: 12px;
+            background-color: var(--oat);
+            border: 1px solid var(--oat);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--slate);
+        }
+
+        /* Layout Grid */
+        .layout-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 40px;
+            align-items: start;
+        }
+
+        @media (max-width: 768px) {
+            .layout-grid { grid-template-columns: 1fr; }
+        }
+
+        /* Code Presentation */
+        .code-box {
+            background-color: var(--code-bg);
+            color: var(--white);
+            border-radius: 8px;
+            padding: 20px;
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.2);
+            margin: 0;
+        }
+
+        .code-highlight {
+            border-bottom: 2px solid var(--clay);
+            padding-bottom: 2px;
+        }
+
+        .code-annotation {
+            display: inline-block;
+            background-color: var(--oat);
+            color: var(--slate);
+            font-family: -apple-system, sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-top: 8px;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .comment-muted { color: var(--gray); }
+        .comment-alert { color: var(--clay); }
+
+        /* Workflow Diagrams */
+        .workflow-box {
+            background-color: var(--off-white);
+            border: 1px solid var(--oat);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 30px 0;
+            text-align: center;
+        }
+
+        .diagram-title {
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.1em;
+            color: var(--gray);
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        /* Gotchas Section */
+        .gotchas {
+            margin-top: 50px;
+            padding-top: 30px;
+            border-top: 2px dashed var(--oat);
+        }
+
+        .gotcha-item {
+            background-color: var(--white);
+            border: 1px solid var(--oat);
+            border-left: 6px solid var(--clay);
+            border-radius: 0 8px 8px 0;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .gotcha-item h4 {
+            margin-top: 0;
+            color: var(--clay);
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="main-container">
+    <h1>I2C Smart Sensor: Architectural Design Justification</h1>
+    <p>This document details the firmware architecture for the STM32 I2C Slave and AVR Master, focusing on the failure modes of naive implementations and the contrastive reasoning behind our design choices.</p>
+
+    <!-- STM32 SLAVE EXPLANATION -->
+    <h2>1. The STM32 Slave: Non-Blocking State Machine</h2>
+
+    <div class="layout-grid">
+        <div class="code-column">
+            <div class="code-box">
+<span class="comment-muted">// The right way: Event-driven IT Callbacks</span>
+void HAL_I2C_AddrCallback(...) {
+    if (TransferDirection == I2C_DIRECTION_TRANSMIT) {
+        <span class="code-highlight">HAL_I2C_Slave_Seq_Receive_IT(hi2c, &rx_buf[0], 1, I2C_FIRST_FRAME);</span>
+    } else {
+        <span class="code-highlight">HAL_I2C_Slave_Seq_Transmit_IT(hi2c, &reg_file[ptr], 1, I2C_NEXT_FRAME);</span>
+    }
+}
+            </div>
+            <span class="code-annotation">[Asynchronous Direction Routing]</span>
+            
+            <div class="code-box" style="margin-top: 20px;">
+<span class="comment-alert">// Why not this? (The Naive approach)</span>
+while(1) {
+    HAL_I2C_Slave_Receive(hi2c, buffer, 1, HAL_MAX_DELAY);
+    if (buffer[0] == 0x06) {
+        HAL_I2C_Slave_Receive(hi2c, &led_state, 1, HAL_MAX_DELAY);
+    }
+}
+            </div>
+            <span class="code-annotation">[Blocking Deadlock Trap]</span>
+        </div>
+
+        <div class="prose-column">
+            <h3>Why not use blocking <code>HAL_I2C_Slave_Receive</code>?</h3>
+            <p>If we used a standard while-loop checking for incoming data using the blocking <span class="token">HAL_I2C_Slave_Receive</span> function, the CPU would be entirely hijacked by the I2C peripheral. </p>
+            <p><strong>The Failure Mode:</strong> If the Master unexpectedly disconnects mid-transaction, or if a clock pulse is lost due to EMI, the slave will wait forever at <span class="token">HAL_MAX_DELAY</span>. The device hangs. Furthermore, while blocking, we cannot sample the ADC or debounce the button.</p>
+            <p><strong>The Solution: The Mailroom Metaphor.</strong> Instead of waiting at the front door for the mailman (blocking), we use <span class="token">HAL_I2C_EnableListen_IT</span>. This tells the hardware: <em>"Ring the doorbell when someone asks for our address."</em> The CPU is free to compute temperatures. When the address matches, the <span class="token">HAL_I2C_AddrCallback</span> fires, and we dynamically route the incoming or outgoing bytes based on the <span class="token">TransferDirection</span>.</p>
+        </div>
+    </div>
+
+    <div class="workflow-box">
+        <span class="diagram-title">STM32 Asynchronous Sequential Callback Architecture</span>
+        <div class="mermaid">
+            graph TD
+            classDef hw fill:#788C5D,stroke:#141413,stroke-width:1px,color:#ffffff,rx:6px,ry:6px;
+            classDef sw fill:#6A8CAF,stroke:#141413,stroke-width:1px,color:#ffffff,rx:6px,ry:6px;
+            
+            A[Hardware: Address Match]:::hw --> B{Read or Write?}:::sw
+            B -->|Write| C[Seq_Receive_IT]:::sw
+            B -->|Read| D[Seq_Transmit_IT]:::sw
+            C --> E[Hardware: RxCpltCallback]:::hw
+            D --> F[Hardware: TxCpltCallback]:::hw
+            E --> G[Update Reg_Ptr]:::sw
+            F --> H[Auto-Increment Ptr]:::sw
+        </div>
+    </div>
+
+    <div class="layout-grid">
+        <div class="code-column">
+            <div class="code-box">
+<span class="comment-muted">// Secure Payload Routing</span>
+void HAL_I2C_SlaveRxCpltCallback(...) {
+    if (<span class="token">g_is_first_byte</span> == 1U) {
+        <span class="comment-muted">// First byte is ALWAYS the register pointer</span>
+        <span class="code-highlight">g_reg_ptr = g_rx_buffer[0];</span>
+        g_is_first_byte = 0U;
+    } else {
+        <span class="comment-muted">// Subsequent bytes are data payloads</span>
+        if (g_reg_ptr < g_reg_size) {
+            <span class="comment-alert">// Hardcoded write protection!</span>
+            if (<span class="code-highlight">g_reg_ptr == REGMAP_ADDR_LED_CTRL</span>) {
+                reg_file[g_reg_ptr] = g_rx_buffer[0];
+            }
+            g_reg_ptr++;
+        }
+    }
+    HAL_I2C_Slave_Seq_Receive_IT(...);
+}
+            </div>
+            <span class="code-annotation">[Stateful Payload Parsing]</span>
+        </div>
+
+        <div class="prose-column">
+            <h3>What if we updated registers directly?</h3>
+            <p>A naive implementation might take whatever byte arrives over the I2C bus and dump it directly into the memory map using a DMA channel or a blind pointer offset. </p>
+            <p><strong>The Failure Mode:</strong> If the Master accidentally sends a pointer of <span class="token">0x09</span> (which is out of bounds for our 8-byte array), a direct write would overwrite adjacent RAM on the STM32, causing a silent memory corruption fault. Alternatively, the Master could overwrite the <span class="token">DEV_ID</span> read-only register.</p>
+            <p><strong>The Solution: The Stateful Bouncer.</strong> We use a volatile flag <span class="token">g_is_first_byte</span>. When the address matches, this flag is set to 1. The very first byte received is intercepted and assigned to <span class="token">g_reg_ptr</span>. Any subsequent bytes in the same transaction are treated as data payloads. Before saving the payload, we enforce strict bounds checking (<span class="token">&lt; g_reg_size</span>) and hardcoded access rights (only <span class="token">LED_CTRL</span> is allowed to be written). The pointer then auto-increments, allowing safe, continuous burst-writes.</p>
+        </div>
+    </div>
+
+    <div class="layout-grid">
+        <div class="code-column">
+            <div class="code-box">
+<span class="comment-muted">// Burst Transmission & Boundary Safeties</span>
+void HAL_I2C_SlaveTxCpltCallback(...) {
+    <span class="comment-muted">// Auto-increment pointer after successful TX</span>
+    if (g_reg_ptr < g_reg_size) {
+        <span class="code-highlight">g_reg_ptr++;</span>
+    }
+
+    <span class="comment-muted">// Prepare next byte for Master's ACK</span>
+    if (g_reg_ptr < g_reg_size) {
+        HAL_I2C_Slave_Seq_Transmit_IT(..., &reg_file[g_reg_ptr], 1, ...);
+    } else {
+        <span class="comment-alert">// Prevent Memory Leak!</span>
+        <span class="code-highlight">uint8_t dummy = 0xFF;</span>
+        HAL_I2C_Slave_Seq_Transmit_IT(..., &dummy, 1, ...);
+    }
+}
+            </div>
+            <span class="code-annotation">[Sequential Memory Streaming]</span>
+        </div>
+
+        <div class="prose-column">
+            <h3>Why auto-increment?</h3>
+            <p>If we forced the Master to send a new register pointer for every single byte it wanted to read, we would waste significant bandwidth on repeated <span class="token">[Start]</span> and <span class="token">[Address]</span> overhead. By auto-incrementing <span class="token">g_reg_ptr</span> inside the TX complete callback, we enable <strong>Burst Reads</strong>. The Master sends the pointer once (e.g., <span class="token">0x02</span> for Temperature), and then simply clocks in 3 bytes sequentially. The slave automatically serves <span class="token">0x02</span>, <span class="token">0x03</span>, and <span class="token">0x04</span> on the fly.</p>
+            <h3>What if the Master reads out of bounds?</h3>
+            <p><strong>The Failure Mode:</strong> If the Master asks for 10 bytes but our register map is only 8 bytes long, a naive implementation would blindly increment the pointer and stream whatever data resides in RAM physically adjacent to our array. This is a severe vulnerability (Data Leakage) and can cause unpredictable application behavior.</p>
+            <p><strong>The Solution: The Dummy Byte.</strong> We check <span class="token">g_reg_ptr &lt; g_reg_size</span> before queueing the next byte. If the Master gets greedy and reads past the end of the array, we intentionally clamp the pointer and stream a harmless <span class="token">0xFF</span> dummy byte instead of exposing random memory.</p>
+        </div>
+    </div>
+
+    <!-- ARDUINO MASTER EXPLANATION -->
+    <h2>2. The AVR Master: Timeout-Protected Bare Metal</h2>
+
+    <div class="layout-grid">
+        <div class="code-column">
+            <div class="code-box">
+<span class="comment-muted">// Custom TWI start with timeout</span>
+static TWI_Status_t TWI_WaitForComplete(void) {
+    uint32_t start_time = Tick_GetMs();
+    <span class="code-highlight">while (!(TWCR & (1 << TWINT))) {</span>
+        if ((Tick_GetMs() - start_time) > TWI_TIMEOUT_MS) {
+            <span class="comment-alert">return TWI_ERROR_TIMEOUT;</span>
+        }
+    }
+    return TWI_OK;
+}
+            </div>
+            <span class="code-annotation">[Hardware State Polling]</span>
+        </div>
+
+        <div class="prose-column">
+            <h3>What if we only used <code>Wire.h</code>?</h3>
+            <p>The standard Arduino <span class="token">Wire</span> library uses infinite while-loops internally. If an I2C slave loses power mid-transaction while holding the SDA line low, the master's <span class="token">Wire.endTransmission()</span> will loop infinitely. Your entire robot or system freezes because a $2 sensor came unplugged.</p>
+            <p><strong>The Solution: The Chain Reaction.</strong> We wrote a bare-metal register driver for the ATmega328P. Every interaction with the <span class="token">TWCR</span> control register is wrapped in <span class="token">TWI_WaitForComplete()</span>, which utilizes our Timer0 1ms tick. If <span class="token">TWINT</span> doesn't set within 100ms, we abort and return a <span class="token">TWI_ERROR_TIMEOUT</span>.</p>
+            <h3>Why Bit-Bang Recovery?</h3>
+            <p>If a timeout occurs, dropping the transaction isn't enough. The slave might still be holding SDA low, waiting for clock pulses. We execute a <strong>Bus Recovery</strong> sequence: we temporarily convert the SCL and SDA pins to standard outputs, and manually clock SCL 9 times. This forces the confused slave hardware state machine to eject any pending bits and release the bus.</p>
+        </div>
+    </div>
+
+    <div class="layout-grid">
+        <div class="code-column">
+            <div class="code-box">
+<span class="comment-muted">// Master Register Write Sequence</span>
+TWI_Start();
+TWI_WriteByte((dev_addr << 1) | 0, TWI_MT_SLA_ACK);
+<span class="code-highlight">TWI_WriteByte(reg_addr, TWI_MT_DATA_ACK);</span>
+TWI_WriteByte(data, TWI_MT_DATA_ACK);
+TWI_Stop();
+            </div>
+            <span class="code-annotation">[Write Protocol Flow]</span>
+            
+            <div class="code-box" style="margin-top: 20px;">
+<span class="comment-muted">// Master Register Burst Read Sequence</span>
+TWI_Start();
+TWI_WriteByte((dev_addr << 1) | 0, TWI_MT_SLA_ACK);
+<span class="code-highlight">TWI_WriteByte(reg_addr, TWI_MT_DATA_ACK);</span>
+<span class="comment-alert">TWI_Start(); // Repeated Start</span>
+TWI_WriteByte((dev_addr << 1) | 1, TWI_MR_SLA_ACK);
+for (uint8_t i = 0; i < len; i++) {
+    uint8_t ack = (i < (len - 1)) ? 1 : 0;
+    TWI_ReadByte(&buf[i], ack);
+}
+TWI_Stop();
+            </div>
+            <span class="code-annotation">[Read Protocol Flow]</span>
+        </div>
+
+        <div class="prose-column">
+            <h3>Deep Dive: Master Read & Write Protocols</h3>
+            <p>Interacting with a register-mapped I2C device requires specific byte sequences to ensure the slave knows <em>which</em> register we want to access.</p>
+            <p><strong>The Write Sequence:</strong> To write to a specific register (like <span class="token">LED_CTRL</span>), the Master first sends a START condition, followed by the Slave Address with the Write bit (0). The next byte sent is the <strong>Register Pointer</strong> (<span class="token">reg_addr</span>). The slave catches this byte and updates its internal pointer. Finally, the Master sends the actual data payload to be written to that register, and concludes with a STOP condition.</p>
+            <p><strong>The Read Sequence (Repeated Start):</strong> Reading data requires a change in bus direction mid-transaction. First, the Master pretends it's going to write by sending the Slave Address (Write = 0) and the <strong>Register Pointer</strong>. Then, instead of sending data, it issues a <strong>Repeated START</strong> condition. This keeps the bus claimed but resets the state machine. The Master then sends the Slave Address again, but this time with the Read bit (1). The slave, remembering the pointer from earlier, begins streaming data. The Master ACKs every byte except the final one, which it NACKs to tell the slave to release the line.</p>
+        </div>
+    </div>
+
+    <div class="workflow-box">
+        <span class="diagram-title">System Interaction: Master Write Sequence</span>
+        <div class="mermaid">
+            sequenceDiagram
+                participant M as Arduino Master (twi.c)
+                participant B as I2C Bus
+                participant S as STM32 Slave (i2c_slave.c)
+
+                M->>B: TWI_Start() -> [START]
+                M->>B: TWI_WriteByte(dev_addr<<1 | 0) -> [SLA+W]
+                B->>S: Hardware Address Match
+                S-->>S: HAL_I2C_AddrCallback()<br/>Set g_is_first_byte = 1
+                S-->>S: HAL_I2C_Slave_Seq_Receive_IT()
+                B-->>M: [ACK]
+                
+                M->>B: TWI_WriteByte(reg_addr) -> [Reg Pointer]
+                B->>S: Hardware Receives Byte
+                S-->>S: HAL_I2C_SlaveRxCpltCallback()<br/>g_reg_ptr = byte<br/>g_is_first_byte = 0
+                S-->>S: HAL_I2C_Slave_Seq_Receive_IT()
+                B-->>M: [ACK]
+                
+                M->>B: TWI_WriteByte(data) -> [Data Payload]
+                B->>S: Hardware Receives Byte
+                S-->>S: HAL_I2C_SlaveRxCpltCallback()<br/>reg_file[g_reg_ptr] = byte<br/>g_reg_ptr++
+                S-->>S: HAL_I2C_Slave_Seq_Receive_IT()
+                B-->>M: [ACK]
+                
+                M->>B: TWI_Stop() -> [STOP]
+                B->>S: Hardware Detects Stop
+                S-->>S: HAL_I2C_ListenCpltCallback()<br/>HAL_I2C_EnableListen_IT()
+        </div>
+    </div>
+
+    <div class="workflow-box">
+        <span class="diagram-title">System Interaction: Master Read Sequence (Repeated Start)</span>
+        <div class="mermaid">
+            sequenceDiagram
+                participant M as Arduino Master (twi.c)
+                participant B as I2C Bus
+                participant S as STM32 Slave (i2c_slave.c)
+
+                Note over M,S: Step 1: Set Register Pointer (Write Mode)
+                M->>B: TWI_Start() -> [START]
+                M->>B: TWI_WriteByte(dev_addr<<1 | 0) -> [SLA+W]
+                B->>S: Hardware Address Match
+                S-->>S: HAL_I2C_AddrCallback()<br/>Set g_is_first_byte = 1
+                S-->>S: HAL_I2C_Slave_Seq_Receive_IT()
+                B-->>M: [ACK]
+                
+                M->>B: TWI_WriteByte(reg_addr) -> [Reg Pointer]
+                B->>S: Hardware Receives Byte
+                S-->>S: HAL_I2C_SlaveRxCpltCallback()<br/>g_reg_ptr = byte<br/>g_is_first_byte = 0
+                S-->>S: HAL_I2C_Slave_Seq_Receive_IT()
+                B-->>M: [ACK]
+
+                Note over M,S: Step 2: Read Data (Repeated Start)
+                M->>B: TWI_Start() -> [Repeated START]
+                M->>B: TWI_WriteByte(dev_addr<<1 | 1) -> [SLA+R]
+                B->>S: Hardware Address Match
+                S-->>S: HAL_I2C_AddrCallback()<br/>(TransferDirection == RECEIVE)
+                S-->>S: HAL_I2C_Slave_Seq_Transmit_IT()<br/>Queue reg_file[g_reg_ptr]
+                B-->>M: [ACK]
+                
+                S->>B: Transmit Byte
+                S-->>S: HAL_I2C_SlaveTxCpltCallback()<br/>g_reg_ptr++
+                S-->>S: HAL_I2C_Slave_Seq_Transmit_IT()<br/>Queue Next Byte
+                B->>M: TWI_ReadByte(&buf) -> [Data]
+                M-->>B: [ACK/NACK]
+                
+                Note over M,S: Master NACKs the final byte to end transfer
+                B->>S: [NACK] Received
+                S-->>S: HAL_I2C_ErrorCallback(AF)<br/>(Acknowledge Failure)
+                S-->>S: HAL_I2C_EnableListen_IT()
+                
+                M->>B: TWI_Stop() -> [STOP]
+        </div>
+    </div>
+
+    <!-- THE GOTCHAS SECTION -->
+    <div class="gotchas">
+        <h2>The "Gotchas"</h2>
+        <p>Critical hardware quirks discovered during implementation that cause silent failures.</p>
+
+        <div class="gotcha-item">
+            <h4>Voltage Tolerance Mismatch</h4>
+            <p>The ATmega328P drives I2C lines to 5V via its internal pull-ups. The STM32F411 runs at 3.3V. While some pins on the STM32 are "5V tolerant", directly connecting them without checking the specific datasheet pinout (like <span class="token">PB6</span> and <span class="token">PB7</span>) can blow the GPIO driver. <strong>Silent Failure:</strong> The pin permanently reads as logic LOW.</p>
+        </div>
+
+        <div class="gotcha-item">
+            <h4>STM32 I2C Clock Stretching Deadlocks</h4>
+            <p>If you put a breakpoint inside <span class="token">HAL_I2C_SlaveRxCpltCallback</span> while debugging the STM32, the hardware automatically holds the SCL line LOW (Clock Stretching). Because the Master's <span class="token">TWI_TIMEOUT_MS</span> is only 100ms, the Master will timeout and attempt a bus recovery while you are still staring at your debugger. <strong>Silent Failure:</strong> Debugging causes phantom bus errors.</p>
+        </div>
+
+        <div class="gotcha-item">
+            <h4>IWDG vs WWDG Confusion</h4>
+            <p>If you accidentally select the Window Watchdog (<span class="token">WWDG</span>) instead of the Independent Watchdog (<span class="token">IWDG</span>) and kick it inside a fast loop, the MCU will reset instantly. WWDG requires you to wait for a specific time window to open before refreshing. <strong>Silent Failure:</strong> Instant, continuous boot-looping.</p>
+        </div>
+    </div>
+
+</div>
+
+<!-- Initialize Mermaid -->
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'base' });
+</script>
+
+</body>
+</html>

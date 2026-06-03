@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Sensor Emulator | I2C Protocol Documentation</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap');
+
+        :root {
+            --bg-color: #0f172a;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent-primary: #3b82f6;
+            --accent-secondary: #8b5cf6;
+            --success: #10b981;
+            --warning: #f59e0b;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-color);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.15) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            width: 100%;
+            padding: 3rem 2rem;
+            text-align: center;
+            background: linear-gradient(135deg, rgba(15,23,42,0.8) 0%, rgba(30,41,59,0.8) 100%);
+            border-bottom: 1px solid var(--glass-border);
+            backdrop-filter: blur(10px);
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin: 0;
+            background: linear-gradient(to right, #60a5fa, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            padding: 0 2rem;
+            box-sizing: border-box;
+            flex: 1;
+        }
+
+        /* Tabs Navigation */
+        .tabs {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .tab-btn {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-muted);
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tab-btn::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: -1;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+
+        .tab-btn.active {
+            color: var(--text-main);
+            border-color: rgba(255,255,255,0.2);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+        }
+
+        .tab-btn.active::before {
+            opacity: 0.2;
+        }
+
+        /* Content Sections */
+        .content-section {
+            display: none;
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Glass Cards */
+        .card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.3);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            color: var(--text-main);
+            font-size: 1.5rem;
+            border-bottom: 1px solid var(--glass-border);
+            padding-bottom: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Register Map Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.95rem;
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        th {
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.05em;
+        }
+
+        tr {
+            transition: background 0.2s ease;
+        }
+
+        tr:hover td {
+            background: rgba(255,255,255,0.05);
+        }
+
+        td:first-child {
+            font-family: 'Fira Code', monospace;
+            color: var(--accent-primary);
+            font-weight: 500;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            background: rgba(255,255,255,0.1);
+        }
+
+        .badge.ro { color: var(--success); background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); }
+        .badge.rw { color: var(--warning); background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); }
+
+        /* Code Blocks & Protocol Diagrams */
+        pre {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--glass-border);
+            padding: 1.5rem;
+            border-radius: 12px;
+            overflow-x: auto;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: #e2e8f0;
+        }
+
+        .protocol-diagram {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin: 1.5rem 0;
+        }
+
+        .proto-box {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .proto-master { background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #93c5fd; }
+        .proto-slave { background: rgba(139, 92, 246, 0.2); border: 1px solid rgba(139, 92, 246, 0.4); color: #d8b4fe; }
+        .proto-ctrl { background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: #cbd5e1; }
+
+        /* Footer */
+        footer {
+            margin-top: 4rem;
+            padding: 2rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            border-top: 1px solid var(--glass-border);
+            width: 100%;
+        }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Smart Sensor Emulator</h1>
+        <p class="subtitle">I2C Protocol Implementation Documentation</p>
+    </header>
+
+    <div class="container">
+        
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('stm32')">STM32 Slave Protocol</button>
+            <button class="tab-btn" onclick="switchTab('arduino')">Arduino Master Implementation</button>
+        </div>
+
+        <!-- STM32 SLAVE SECTION -->
+        <section id="stm32" class="content-section active">
+            
+            <div class="card">
+                <h2>Overview</h2>
+                <p>The STM32F411 BlackPill acts as an I2C slave exposing an 8-byte register map. It emulates a hardware sensor by providing access to an internal temperature sensor, a user button counter, and an LED controller.</p>
+                <p><strong>Slave Address:</strong> <code>0x42</code> (7-bit) -> <code>0x84</code> (Write), <code>0x85</code> (Read)</p>
+            </div>
+
+            <div class="card">
+                <h2>Register Map</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Address</th>
+                            <th>Name</th>
+                            <th>Access</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>0x00</td>
+                            <td>DEV_ID</td>
+                            <td><span class="badge ro">R</span></td>
+                            <td>Device identifier, hardcoded to <code>0xA5</code>.</td>
+                        </tr>
+                        <tr>
+                            <td>0x01</td>
+                            <td>FW_VERSION</td>
+                            <td><span class="badge ro">R</span></td>
+                            <td>Firmware version, hardcoded to <code>0x01</code>.</td>
+                        </tr>
+                        <tr>
+                            <td>0x02</td>
+                            <td>TEMP_RAW_H</td>
+                            <td><span class="badge ro">R</span></td>
+                            <td>Raw ADC value (12-bit) high byte. Updated every 500ms.</td>
+                        </tr>
+                        <tr>
+                            <td>0x03</td>
+                            <td>TEMP_RAW_L</td>
+                            <td><span class="badge ro">R</span></td>
+                            <td>Raw ADC value (12-bit) low byte.</td>
+                        </tr>
+                        <tr>
+                            <td>0x04</td>
+                            <td>TEMP_DEG_C</td>
+                            <td><span class="badge ro">R</span></td>
+                            <td>Calculated internal temperature in Celsius (Signed 8-bit).</td>
+                        </tr>
+                        <tr>
+                            <td>0x05</td>
+                            <td>BTN_COUNT</td>
+                            <td><span class="badge ro">R</span></td>
+                            <td>Increments on STM32 PA0 button press (debounced 50ms).</td>
+                        </tr>
+                        <tr>
+                            <td>0x06</td>
+                            <td>LED_CTRL</td>
+                            <td><span class="badge rw">R/W</span></td>
+                            <td>Bit 0 controls PC13 LED (1 = ON, 0 = OFF).</td>
+                        </tr>
+                        <tr>
+                            <td>0x07</td>
+                            <td>STATUS</td>
+                            <td><span class="badge ro">R</span></td>
+                            <td>Bit 0 = ADC Err, Bit 1 = I2C Err.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <h2>I2C Transaction Formats</h2>
+                <p>The STM32 slave uses an auto-incrementing register pointer. This allows the master to read or write multiple sequential bytes efficiently (burst mode).</p>
+                
+                <h3>Master Write (e.g., to LED_CTRL)</h3>
+                <div class="protocol-diagram">
+                    <div class="proto-ctrl">[S]</div>
+                    <div class="proto-master">Addr 0x42 + W</div>
+                    <div class="proto-slave">ACK</div>
+                    <div class="proto-master">Reg Addr (0x06)</div>
+                    <div class="proto-slave">ACK</div>
+                    <div class="proto-master">Data (0x01)</div>
+                    <div class="proto-slave">ACK</div>
+                    <div class="proto-ctrl">[P]</div>
+                </div>
+
+                <h3>Master Read (e.g., Burst reading Temp)</h3>
+                <div class="protocol-diagram">
+                    <div class="proto-ctrl">[S]</div>
+                    <div class="proto-master">Addr 0x42 + W</div>
+                    <div class="proto-slave">ACK</div>
+                    <div class="proto-master">Reg Addr (0x02)</div>
+                    <div class="proto-slave">ACK</div>
+                    <div class="proto-ctrl">[Sr]</div>
+                    <div class="proto-master">Addr 0x42 + R</div>
+                    <div class="proto-slave">ACK</div>
+                    <div class="proto-slave">Data (RAW_H)</div>
+                    <div class="proto-master">ACK</div>
+                    <div class="proto-slave">Data (RAW_L)</div>
+                    <div class="proto-master">ACK</div>
+                    <div class="proto-slave">Data (DEG_C)</div>
+                    <div class="proto-master">NACK</div>
+                    <div class="proto-ctrl">[P]</div>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.9rem;"><em>Legend: [S] = Start, [Sr] = Repeated Start, [P] = Stop. Blue = Master, Purple = Slave.</em></p>
+            </div>
+
+        </section>
+
+        <!-- ARDUINO MASTER SECTION -->
+        <section id="arduino" class="content-section">
+            
+            <div class="card">
+                <h2>Overview</h2>
+                <p>The Arduino Uno acts as the I2C Master, written in pure bare-metal C (`avr-libc`) without the Arduino Framework or `Wire.h`. It periodically polls the STM32 slave to read sensor data and sends commands to toggle the LED.</p>
+            </div>
+
+            <div class="card">
+                <h2>Bare-Metal TWI (I2C) Driver</h2>
+                <p>The TWI driver operates at 100 kHz. It interacts directly with the ATmega328P hardware registers (`TWCR`, `TWSR`, `TWDR`, `TWBR`).</p>
+                
+                <h3>Key Features:</h3>
+                <ul>
+                    <li><strong>Timeout Protection:</strong> Every while loop checking the `TWINT` flag includes a millisecond timeout check using Timer0. This prevents the master from permanently freezing if a slave holds the clock line indefinitely.</li>
+                    <li><strong>Bus Recovery:</strong> If a timeout or bus error occurs, the master can re-initialize the bus by taking over the SDA/SCL pins as standard GPIOs and manually toggling the clock line 9 times to unstick the slave state machine.</li>
+                </ul>
+
+                <h3>API Usage Example</h3>
+<pre><code>// Reading 3 bytes of Temperature data starting at register 0x02
+uint8_t buf[3];
+TWI_Status_t st = TWI_ReadRegister(0x42, 0x02, buf, 3);
+
+if (st == TWI_OK) {
+    uint16_t raw_temp = (buf[0] << 8) | buf[1];
+    int8_t deg_c = (int8_t)buf[2];
+    // Process temperature...
+}</code></pre>
+            </div>
+
+            <div class="card">
+                <h2>System Architecture</h2>
+                <p>The master utilizes a non-blocking architecture using a Timer0-driven tick system.</p>
+                <ul>
+                    <li><code>Tick_Init()</code> sets up Timer0 in CTC mode to fire an interrupt every 1ms, incrementing a global counter.</li>
+                    <li><code>UART_Init()</code> sets up UART0 at 115200 baud for debugging. Output can be viewed on a serial monitor.</li>
+                    <li>The main super-loop uses <code>Tick_GetMs()</code> to execute the polling routine precisely every 1000ms without blocking CPU execution.</li>
+                </ul>
+            </div>
+
+        </section>
+
+    </div>
+
+    <footer>
+        &copy; 2026 Advanced Agentic Coding. Built for the I2C Smart Sensor Portfolio Project.
+    </footer>
+
+    <script>
+        function switchTab(tabId) {
+            // Update buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Update content sections
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            document.getElementById(tabId).classList.add('active');
+        }
+    </script>
+</body>
+</html>
