@@ -27,9 +27,7 @@
 /* USER CODE BEGIN Includes */
 #include "sensor_regmap.h"
 #include "i2c_slave.h"
-#include "button.h"
-#include "temp_sensor.h"
-#include "led_ctrl.h"
+#include "smart_sensor_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -74,6 +72,9 @@ static volatile uint8_t g_reg_file[REGMAP_SIZE] = {
 extern I2C_HandleTypeDef hi2c1;
 extern ADC_HandleTypeDef hadc1;
 extern IWDG_HandleTypeDef hiwdg;
+
+/* Smart Sensor Context Instance */
+SmartSensor_HandleTypeDef hSensor;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -121,9 +122,8 @@ int main(void)
   MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
   /* Initialize custom hardware modules and state variables */
-  Button_Init();                  /* Set up user button press flags and timers */
-  LED_Init();                     /* Set up LED state control variables */
-  TempSensor_Init(&hadc1);        /* Register ADC1 handle for internal temperature sensor */
+  /* Initialize unified Smart Sensor application layer */
+  SmartSensor_Init(&hSensor, &hadc1, g_reg_file);
   I2C_Slave_Init(&hi2c1, g_reg_file, REGMAP_SIZE); /* Start I2C slave listening on address 0x42 */
   /* USER CODE END 2 */
 
@@ -140,9 +140,7 @@ int main(void)
      * They use non-blocking internal clocks (using HAL_GetTick()) to execute
      * their work at different periodic intervals without stopping the loop.
      */
-    Button_Process(g_reg_file);     /* Debounce PA0 button edge and update press counter */
-    TempSensor_Process(g_reg_file); /* Read internal temperature channel every 500ms and save raw/Celsius values */
-    LED_Process(g_reg_file);        /* Read LED_CTRL register and adjust GPIOC Pin 13 voltage accordingly */
+    SmartSensor_Process(&hSensor);
 
     /* 
      * Kick the Independent Watchdog (IWDG) timer.
