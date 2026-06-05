@@ -67,6 +67,16 @@ int main(void)
             st = TWI_ReadRegister(SENSOR_I2C_ADDR, REGMAP_ADDR_DEV_ID, buf, 2U);
             if (st == TWI_OK)
             {
+                if (buf[0] != REGMAP_DEV_ID_VALUE)
+                {
+                    UART_Print("  [ERROR] Invalid DevID! Expected 0x");
+                    UART_PrintHex(REGMAP_DEV_ID_VALUE);
+                    UART_Print(" but got 0x");
+                    UART_PrintHex(buf[0]);
+                    UART_Print("\r\n");
+                    continue; /* Skip the rest of the polling cycle to prevent erratic behavior */
+                }
+
                 UART_Print("  DevID: 0x");
                 UART_PrintHex(buf[0]); /* Expected: 0xA5 */
                 UART_Print("  FW_Ver: 0x");
